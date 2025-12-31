@@ -30,12 +30,13 @@ brew install geckodriver              # macOS
 python3 QWEN_2.5_MATH_72B_SELENIUM_SCRAPER.py
 ```
 Automatically scrapes Qwen2.5-Math HuggingFace demo with intelligent resume capability.
+(requires firefox gecko driver installed)
 
-#### 3. Local Inference (Qwen-7B)
+#### 3. Colab Inference (Qwen-7B)
 ```bash
 jupyter notebook QWEN_2.5_MATH_7B_HF.ipynb
 ```
-Runs Qwen-7B locally. No API keys required.
+Runs Qwen-7B on Google Colab. No API keys required.
 
 #### 4. Manual Entry
 Edit `data/qna_responses_final.xlsx` to add responses for additional models directly.
@@ -66,30 +67,30 @@ python3 3model_response_verifier.py    # Verify correctness
       │              │              │              │
       ▼              ▼              ▼              ▼
 ┌────────────────────────────────────────────────────────────────┐
-│  STAGE 1: Multiple Collection Methods (Choose One or Combine)   │
+│  STAGE 1: Multiple Collection Methods (Choose One or Combine)  │
 ├────────────────────────────────────────────────────────────────┤
-│  API Collection (1model_response_collector.py)                  │
-│      • OpenRouter: GPT-4o, DeepSeek, Mistral, Llama, Qwen       │
+│  API Collection (1model_response_collector.py)                 │
+│      • OpenRouter: GPT-4o, DeepSeek, Mistral, Llama, Qwen      │
 │      • Resume via JSON checkpoint                              │
 │      • Output: qna_responses.xlsx                              │
 ├────────────────────────────────────────────────────────────────┤
 │  Web Scraping (QWEN_2.5_MATH_72B_SELENIUM_SCRAPER.py)          │
 │      • Scrapes Qwen2.5-Math HF demo interface                  │
 │      • Dynamic page load detection + iframe handling           │
-│      • Stability-based response detection                       │
-│      • Smart cache resume from checkpoints                      │
+│      • Stability-based response detection                      │
+│      • Smart cache resume from checkpoints                     │
 │      • Output: qna_responses_qwen2.5_math_72b.xlsx             │
 ├────────────────────────────────────────────────────────────────┤
-│  Local Inference (QWEN_2.5_MATH_7B_HF.ipynb)                   │
-│      • Qwen-7B local inference via Transformers                │
+│  Local/Colab Inference (QWEN_2.5_MATH_7B_HF.ipynb)             │
+│      • Qwen-7B local/Colab inference via Transformers          │
 │      • No API needed - runs on your hardware                   │
 │      • Output: qna_responses_qwen_7b_hf.xlsx                   │
 ├────────────────────────────────────────────────────────────────┤
-│  Manual Entry (qna_responses_final.xlsx)                        │
+│  Manual Entry (qna_responses_final.xlsx)                       │
 │      • Add more models by editing Excel manually               │
-│      • Paste responses from any source                          │
+│      • Paste responses from any source                         │
 │      • Stage 2 will sync to JSON                               │
-└────────────────────┬────────────────────────────────────────────┘
+└────────────────────┬───────────────────────────────────────────┘
                      │ (All responses merged in Excel)
                      ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -210,10 +211,10 @@ Create an Excel file (`data/your_benchmark.xlsx`) with these columns:
 
 **Minimal example:**
 ```excel
-id               | instruction                                          | answer_latex
-Q1_easy          | What is 2+2?                                        | 4
+id               | instruction                                        | answer_latex
+Q1_easy          | What is 2+2?                                       | 4
 Q2_medium        | Solve: x² - 5x + 6 = 0                             | x = 2, x = 3
-Q3_hard          | Integrate: ∫x sin(x) dx                             | -x cos(x) + sin(x) + C
+Q3_hard          | Integrate: ∫x sin(x) dx                            | -x cos(x) + sin(x) + C
 ```
 
 #### Step 2: Configure Models
@@ -302,7 +303,7 @@ def get_model_response(prompt, model_id, api_key):
 
 ---
 
-### Direct API Integration (Recommended for Production)
+### Direct API Integration
 
 Integrate each model's official API directly:
 
@@ -438,65 +439,6 @@ def verify_response(model_response, correct_answer, model="gpt-4"):
 
 ---
 
-### Custom Abstraction Layer
-
-Build your own unified interface:
-
-```python
-# api_clients.py
-class APIClient:
-    """Base class for model APIs"""
-    def get_response(self, prompt, **kwargs):
-        raise NotImplementedError
-
-class OpenAIClient(APIClient):
-    def __init__(self, api_key):
-        self.api_key = api_key
-    def get_response(self, prompt, **kwargs):
-        # OpenAI implementation
-        pass
-
-class DeepSeekClient(APIClient):
-    def __init__(self, api_key):
-        self.api_key = api_key
-    def get_response(self, prompt, **kwargs):
-        # DeepSeek implementation
-        pass
-
-class ClaudeClient(APIClient):
-    def __init__(self, api_key):
-        self.api_key = api_key
-    def get_response(self, prompt, **kwargs):
-        # Claude implementation
-        pass
-
-# Usage
-clients = {
-    'gpt-4o': OpenAIClient(os.environ['OPENAI_API_KEY']),
-    'deepseek-v3': DeepSeekClient(os.environ['DEEPSEEK_API_KEY']),
-    'claude-3-opus': ClaudeClient(os.environ['ANTHROPIC_API_KEY'])
-}
-
-response = clients['gpt-4o'].get_response("Your prompt here")
-```
-
-**Pros:** Complete control, extensible, no external dependencies
-**Cons:** More boilerplate code, need to maintain each API integration
-
----
-
-### Recommended Approach by Use Case
-
-| Use Case | Recommended | Reason |
-|----------|------------|--------|
-| **Quick Prototyping** | OpenRouter | Single API key, 200+ models |
-| **Production Evaluation** | Direct APIs | Cost savings, reliability, no rate limits |
-| **Multi-Model Agent** | Custom Layer | Flexibility, easy to switch/fallback |
-| **Research Comparison** | LiteLLM | Unified logging, experiment tracking |
-| **Educational** | Direct APIs | Learn model-specific quirks |
-
----
-
 ## 🔧 Advanced Features
 
 ### Resume Capability
@@ -504,7 +446,7 @@ response = clients['gpt-4o'].get_response("Your prompt here")
 All stages support resuming from checkpoints:
 
 **Stage 1 (Collector):**
-- Loads `responses.json` if exists
+- Loads `qna_responses.json` if exists
 - Skips already-processed questions
 - Updates after each response
 
@@ -623,54 +565,6 @@ def verify_response_simple(response, correct_answer, api_key, model="gpt-4o"):
 **Best for:** Quick prototyping, simple correctness checks
 **Cost:** ~$0.0001 per verification call
 
----
-
-### Rule-Based Verification (No LLM)
-
-Skip LLM entirely for deterministic checks:
-
-```python
-import re
-from difflib import SequenceMatcher
-
-def verify_response_rules(response, correct_answer):
-    """Rule-based verification without LLM"""
-
-    # Normalize responses
-    resp_norm = response.lower().strip()
-    corr_norm = correct_answer.lower().strip()
-
-    # Exact match
-    if resp_norm == corr_norm:
-        return {"is_correct": True, "method": "exact_match"}
-
-    # Extract numerical answers
-    resp_nums = re.findall(r'-?\d+\.?\d*', resp_norm)
-    corr_nums = re.findall(r'-?\d+\.?\d*', corr_norm)
-
-    if resp_nums and corr_nums:
-        try:
-            # Check with ±0.01 tolerance
-            if abs(float(resp_nums[0]) - float(corr_nums[0])) < 0.01:
-                return {"is_correct": True, "method": "numeric_match"}
-        except:
-            pass
-
-    # Similarity check
-    similarity = SequenceMatcher(None, resp_norm, corr_norm).ratio()
-    if similarity > 0.95:
-        return {"is_correct": True, "method": "similarity", "score": similarity}
-
-    return {"is_correct": False, "method": "no_match", "similarity": similarity}
-```
-
-**Pros:** Instant, no API calls, no costs, deterministic
-**Cons:** Limited to simple answers, no semantic understanding
-**Best for:** Multiple choice, exact numerical answers, quick screening
-**Cost:** Free
-
-
----
 
 ## 📊 Data Formats
 
@@ -821,78 +715,6 @@ data/
 
 ---
 
-### .env.example (Share Configuration Template)
-
-Create a `.env.example` file for developers:
-
-```env
-# .env.example - Copy this to .env and fill in your credentials
-OPENROUTER_API_KEY=sk-or-your-key-here
-OPENAI_API_KEY=sk-your-key-here
-DEEPSEEK_API_KEY=sk-your-key-here
-ANTHROPIC_API_KEY=sk-ant-your-key-here
-MISTRAL_API_KEY=your-key-here
-QWEN_API_KEY=your-key-here
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/your/credentials.json
-
-INPUT_FILE=data/questions.xlsx
-OUTPUT_FILE=data/responses.xlsx
-VERIFICATION_MODEL=gpt-4o
-TEMPERATURE=0.0
-```
-
-Share `.env.example` in repo, but not `.env`:
-
-```bash
-# In README
-cp .env.example .env
-# Then edit .env with your actual API keys
-```
-
----
-
-### Recommended Configuration Strategy
-
-```
-Development:     Use .env file (python-dotenv)
-CI/CD Pipeline:  Use environment variables
-Production:      Use environment variables
-Sharing:         Commit .env.example, not .env
-```
-
-### Complete Setup Example
-
-1. **Create `.env` file:**
-   ```bash
-   cp .env.example .env
-   nano .env  # Edit with your API keys
-   ```
-
-2. **Update script header:**
-   ```python
-   import os
-   from dotenv import load_dotenv
-
-   load_dotenv()
-
-   # Load from .env
-   API_KEY = os.getenv("OPENROUTER_API_KEY")
-   INPUT_FILE = os.getenv("INPUT_FILE", "data/questions.xlsx")
-   OUTPUT_FILE = os.getenv("OUTPUT_FILE", "data/responses.xlsx")
-   ```
-
-3. **Run script:**
-   ```bash
-   python3 1model_response_collector.py
-   ```
-
-4. **Add to .gitignore:**
-   ```bash
-   echo ".env" >> .gitignore
-   ```
-
----
-
 ### File Path Configuration
 
 Edit these variables in each script:
@@ -996,67 +818,6 @@ python3 3model_response_verifier.py
 
 ## 📈 Performance Optimization
 
-### Parallel Model Processing
-Currently sequential. To parallelize (advanced):
-```python
-# Modify Stage 1 to use ThreadPoolExecutor
-from concurrent.futures import ThreadPoolExecutor
-
-with ThreadPoolExecutor(max_workers=3) as executor:
-    futures = [executor.submit(process_model, config) for config in model_configs]
-```
-
-### Batch Verification
-Modify Stage 3 to verify multiple questions per agent call:
-```python
-# Group questions and verify in batches
-batch_size = 5
-for i in range(0, len(questions), batch_size):
-    batch = questions[i:i+batch_size]
-    await verify_batch(batch)
-```
-
-## 🔄 Integration with Other Tools
-
-### Convert to Hugging Face Dataset
-```python
-from datasets import Dataset
-
-with open('data/qna_verified_responses.json') as f:
-    data = json.load(f)
-
-# Convert to HF format
-ds = Dataset.from_dict({
-    'id': [...],
-    'instruction': [...],
-    'correct': [...],
-    'explanations': [...]
-})
-
-ds.push_to_hub('username/my-benchmark')
-```
-
-### Export to CSV for Analytics
-```python
-import json
-import pandas as pd
-
-with open('data/qna_verified_responses.json') as f:
-    data = json.load(f)
-
-# Flatten and export
-records = []
-for qid, qdata in data.items():
-    for model, is_correct in qdata['correct'].items():
-        records.append({
-            'question_id': qid,
-            'model': model,
-            'correct': is_correct,
-            'explanation': qdata['explanations'].get(model, '')
-        })
-
-pd.DataFrame(records).to_csv('results.csv', index=False)
-```
 
 ## 📝 License
 
@@ -1088,9 +849,9 @@ If you use this pipeline in research, cite as:
 ```bibtex
 @software{llm_pipeline_2025,
   title={LLM Response Collection & Verification Pipeline},
-  author={Your Team},
+  author={Dr. Shradha Research Team},
   year={2025},
-  url={https://github.com/yourusername/llm-eval-pipeline}
+  url={https://github.com/tariqjamil-bwp/LLM-Benchmarking}
 }
 ```
 
