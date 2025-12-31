@@ -24,7 +24,7 @@ from models import get_model_response, MODEL_CONFIGS
 # ================================================================================
 INPUT_FILE = "data/ds2_qna.xlsx"      # Input: Questions dataset
 OUTPUT_FILE = "data/qna_responses.xlsx"  # Output: Excel with collected responses
-JSON_FILE = "data/responses.json"     # Output: JSON for resume capability
+JSON_FILE = "data/qna_responses.json"     # Output: JSON for resume capability
 
 # ================================================================================
 # CONFIGURATION

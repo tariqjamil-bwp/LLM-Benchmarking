@@ -162,6 +162,7 @@ async def response_gt_compare(responses_json, question_id, model_name, ground_tr
     """
     Compare model response with ground truth for a specific question and model.
     Skip if verification already exists in the output file.
+    Note: Response changes are detected and cleared BEFORE this function is called.
     """
     logger = logging.getLogger(__name__)
 
@@ -239,6 +240,36 @@ async def verify_model_responses():
 
     logger.info("Syncing VERIFIED structure with RESPONSES structure...")
 
+    # ============================================================================
+    # DETECT RESPONSE CHANGES BEFORE SYNCING (Approach 1 - EARLY DETECTION)
+    # ============================================================================
+    changes_detected = {}
+
+    for question_id, response_data in responses_input.items():
+        if 'responses' not in response_data:
+            continue
+
+        for model_name, new_response in response_data['responses'].items():
+            if new_response is None or str(new_response).strip() == '':
+                continue
+
+            # Get old response from verified_data
+            old_response = None
+            if (question_id in verified_data and
+                'responses' in verified_data[question_id] and
+                model_name in verified_data[question_id]['responses']):
+                old_response = verified_data[question_id]['responses'][model_name]
+
+            # Check if response changed
+            if old_response is not None and old_response != new_response:
+                if question_id not in changes_detected:
+                    changes_detected[question_id] = []
+                changes_detected[question_id].append(model_name)
+                logger.info(f"  CHANGE DETECTED: {question_id} / {model_name}")
+
+    logger.info(f"Total changes detected: {sum(len(v) for v in changes_detected.values())} model responses")
+    # ============================================================================
+
     for question_id, response_data in responses_input.items():
         if question_id not in verified_data:
             verified_data[question_id] = {}
@@ -262,6 +293,18 @@ async def verify_model_responses():
             for model_name in verified_data[question_id]['responses'].keys():
                 if model_name not in verified_data[question_id]['correct']:
                     verified_data[question_id]['correct'][model_name] = None
+
+        # ====================================================================
+        # CLEAR VERIFICATIONS FOR CHANGED RESPONSES (Approach 1)
+        # ====================================================================
+        if question_id in changes_detected:
+            for model_name in changes_detected[question_id]:
+                if 'correct' in verified_data[question_id]:
+                    verified_data[question_id]['correct'][model_name] = None
+                if 'explanations' in verified_data[question_id]:
+                    verified_data[question_id]['explanations'][model_name] = None
+                logger.info(f"  Cleared verification for {question_id} / {model_name}")
+        # ====================================================================
 
     logger.info("Synchronizing manual updates from RESPONSES 'correct' key...")
     synced_updates = 0
@@ -367,8 +410,12 @@ async def verify_model_responses():
     for question_id, data in verified_data.items():
         row = {}
 
+        # Add question_id as 'id' column (QID is the dictionary key, not a field)
+        row['id'] = question_id
+
         for col in metadata_cols:
-            row[col] = data.get(col, None)
+            if col != 'id':  # Skip 'id' since we already added it
+                row[col] = data.get(col, None)
 
         if 'responses' in data and isinstance(data['responses'], dict):
             for model_name in sorted(data['responses'].keys()):

@@ -1,18 +1,52 @@
 # LLM Response Collection & Verification Pipeline
 
-A modular, production-ready pipeline for collecting responses from multiple Large Language Models (LLMs), verifying their correctness, and generating analysis reports. Designed for extensibility - easily adapt to your own evaluation benchmarks.
+A production-ready pipeline for collecting responses from multiple Large Language Models, verifying their correctness, and generating analysis reports. Supports API-based collection, web scraping, local inference, and manual entry.
 
-## 🎯 Quick Start
+## 🚀 Getting Started
+
+### Prerequisites
 
 ```bash
-# 1. Setup environment
 pip install -r requirements.txt
-export OPENROUTER_API_KEY="your_api_key_here"
+```
 
-# 2. Run the pipeline
+### Collection Methods
+
+Choose one or combine multiple collection methods:
+
+#### 1. API Collection (Multiple Models via OpenRouter)
+```bash
+export OPENROUTER_API_KEY="your_api_key_here"
 python3 1model_response_collector.py
-python3 2update_excel2json.py
-python3 3model_response_verifier.py
+```
+Collects from: GPT-4o, DeepSeek, Mistral, Llama, Qwen. Resume-enabled via checkpoints.
+
+#### 2. Web Scraping (Qwen2.5-Math Demo)
+```bash
+# Install geckodriver
+brew install geckodriver              # macOS
+# OR: sudo apt-get install firefox-geckodriver  # Linux
+
+python3 QWEN_2.5_MATH_72B_SELENIUM_SCRAPER.py
+```
+Automatically scrapes Qwen2.5-Math HuggingFace demo with intelligent resume capability.
+
+#### 3. Local Inference (Qwen-7B)
+```bash
+jupyter notebook QWEN_2.5_MATH_7B_HF.ipynb
+```
+Runs Qwen-7B locally. No API keys required.
+
+#### 4. Manual Entry
+Edit `data/qna_responses_final.xlsx` to add responses for additional models directly.
+
+### Complete Pipeline
+
+After collecting responses:
+
+```bash
+python3 2update_excel2json.py          # Merge all sources
+python3 3model_response_verifier.py    # Verify correctness
 ```
 
 ## 📊 Pipeline Architecture
@@ -23,21 +57,46 @@ python3 3model_response_verifier.py
 │  Columns: id, instruction, problem_text, answer_latex, ...      │
 └────────────────────┬────────────────────────────────────────────┘
                      │
-                     ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  STAGE 1: Response Collection (OpenRouter API)                  │
-│  • 1model_response_collector.py                                 │
-│  • Collects responses from N models                             │
-│  • Resume capability via JSON checkpoints                       │
-│  • Outputs: qna_responses.xlsx + responses.json                 │
+      ┌──────────────┼──────────────┬──────────────┐
+      ▼              ▼              ▼              ▼
+   ╔════════════╗ ╔════════════╗ ╔════════════╗ ╔════════════╗
+   │ API        │ │ Web        │ │ Local      │ │ Manual     │
+   │ Collection │ │ Scraping   │ │ Inference  │ │ Entry      │
+   ╚════════════╝ ╚════════════╝ ╚════════════╝ ╚════════════╝
+      │              │              │              │
+      ▼              ▼              ▼              ▼
+┌────────────────────────────────────────────────────────────────┐
+│  STAGE 1: Multiple Collection Methods (Choose One or Combine)   │
+├────────────────────────────────────────────────────────────────┤
+│  API Collection (1model_response_collector.py)                  │
+│      • OpenRouter: GPT-4o, DeepSeek, Mistral, Llama, Qwen       │
+│      • Resume via JSON checkpoint                              │
+│      • Output: qna_responses.xlsx                              │
+├────────────────────────────────────────────────────────────────┤
+│  Web Scraping (QWEN_2.5_MATH_72B_SELENIUM_SCRAPER.py)          │
+│      • Scrapes Qwen2.5-Math HF demo interface                  │
+│      • Dynamic page load detection + iframe handling           │
+│      • Stability-based response detection                       │
+│      • Smart cache resume from checkpoints                      │
+│      • Output: qna_responses_qwen2.5_math_72b.xlsx             │
+├────────────────────────────────────────────────────────────────┤
+│  Local Inference (QWEN_2.5_MATH_7B_HF.ipynb)                   │
+│      • Qwen-7B local inference via Transformers                │
+│      • No API needed - runs on your hardware                   │
+│      • Output: qna_responses_qwen_7b_hf.xlsx                   │
+├────────────────────────────────────────────────────────────────┤
+│  Manual Entry (qna_responses_final.xlsx)                        │
+│      • Add more models by editing Excel manually               │
+│      • Paste responses from any source                          │
+│      • Stage 2 will sync to JSON                               │
 └────────────────────┬────────────────────────────────────────────┘
-                     │
+                     │ (All responses merged in Excel)
                      ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  STAGE 2: Data Sync (Excel → JSON)                              │
 │  • 2update_excel2json.py                                        │
-│  • Syncs manually edited Excel to JSON                          │
-│  • Nested structure: {responses, correct, explanations}         │
+│  • Merges all collection methods into one Excel file            │
+│  • Syncs to JSON with nested structure                          │
 │  • Column validation & auto-creation                            │
 │  • Outputs: qna_responses_final.json                            │
 └────────────────────┬────────────────────────────────────────────┘
@@ -46,7 +105,7 @@ python3 3model_response_verifier.py
 ┌─────────────────────────────────────────────────────────────────┐
 │  STAGE 3: Verification (LLM-as-Judge)                           │
 │  • 3model_response_verifier.py                                  │
-│  • Uses LLM agent to verify correctness                         │
+│  • Uses LLM agent to verify correctness of all models           │
 │  • Async processing with resume capability                      │
 │  • Outputs: qna_verified_responses.json + Excel with scores     │
 └────────────────────┬────────────────────────────────────────────┘
@@ -56,28 +115,82 @@ python3 3model_response_verifier.py
 │  OUTPUT: Verified Dataset                                        │
 │  • qna_verified_responses.json (with correctness flags)         │
 │  • qna_verified_responses_final.xlsx (human-readable)           │
-│  • Analysis-ready data                                          │
+│  • Analysis-ready for all models                                │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## 📁 File Structure
+## Project Structure
 
 ```
 project/
-├── 1model_response_collector.py      # Stage 1: Collect responses
-├── 2update_excel2json.py             # Stage 2: Sync Excel→JSON
-├── 3model_response_verifier.py       # Stage 3: Verify responses
-├── 4_qwen_inference_pipeline.ipynb   # Optional: Qwen-7B local inference
-├── models.py                          # Shared config & API functions
-├── requirements.txt                   # Python dependencies
+├── Collection Scripts
+│   ├── 1model_response_collector.py        # API-based collection (OpenRouter)
+│   ├── QWEN_2.5_MATH_72B_SELENIUM_SCRAPER.py  # Web scraping (Selenium)
+│   ├── QWEN_2.5_MATH_7B_HF.ipynb           # Local inference (Jupyter)
+│   └── 2update_excel2json.py               # Merge and sync to JSON
+│
+├── Verification
+│   └── 3model_response_verifier.py         # Verify response correctness
+│
+├── Shared
+│   ├── models.py                           # Configuration & API utilities
+│   ├── requirements.txt                    # Dependencies
+│   └── monitor_checkpoints.py              # Progress monitoring
+│
 ├── data/
-│   ├── questions.xlsx                # Input: Your questions
-│   ├── qna_responses.xlsx            # Stage 1 output
-│   ├── qna_responses_final.json      # Stage 2 output
-│   └── qna_verified_responses.json   # Stage 3 output
-├── Analysis/                          # Generated charts & summaries
-└── README.md                          # This file
+│   ├── ds2_qna.xlsx                       # Input questions
+│   ├── qna_responses.xlsx                 # API collection output
+│   ├── qna_responses_qwen2.5_math_72b.xlsx # Scraper output
+│   ├── qna_responses_qwen_7b_hf.xlsx      # Local inference output
+│   ├── qna_responses_final.xlsx           # Merged responses (editable)
+│   ├── qna_responses_final.json           # Final JSON (Stage 2 output)
+│   └── qna_verified_responses.json        # Verified responses (Stage 3 output)
+│
+├── checkpoints/
+│   ├── qwen_checkpoint_3.xlsx
+│   ├── qwen_checkpoint_6.xlsx
+│   └── ... (auto-saved every 3 questions)
+│
+└── README.md
 ```
+
+## Web Scraper Details
+
+The Selenium scraper (`QWEN_2.5_MATH_72B_SELENIUM_SCRAPER.py`) automatically collects responses from the Qwen2.5-Math HuggingFace demo interface.
+
+### How It Works
+
+**Dynamic Page Loading:** Waits for the interface to load completely, detecting when input fields are accessible in iframes before processing.
+
+**Intelligent Response Detection:** Monitors response generation in real-time, detecting when the model finishes outputting (stability timeout: 5 seconds, max wait: 150 seconds per question).
+
+**Smart Resume:** Loads the latest checkpoint into memory. When restarting, it instantly skips previously completed questions and continues from where it left off.
+
+**Response Cleaning:** Automatically removes UI elements while preserving mathematical formatting, LaTeX, and newlines.
+
+**Progress Checkpoints:** Saves a checkpoint every 3 questions for recovery in case of interruption.
+
+### Running the Scraper
+
+```bash
+python3 QWEN_2.5_MATH_72B_SELENIUM_SCRAPER.py
+```
+
+The browser window opens automatically. You can watch progress in real-time. If interrupted, run the command again to resume from the latest checkpoint.
+
+### Configuration
+
+Edit at the top of the script:
+
+```python
+DEMO_URL = "https://huggingface.co/spaces/Qwen/Qwen2.5-Math-Demo"
+INPUT_FILE = "data/ds2_qna.xlsx"
+OUTPUT_FILE = "data/qna_responses_qwen2.5_math_72b.xlsx"
+max_wait = 150                  # Seconds to wait per question
+stable_threshold = 5            # Stability checks (1 second each)
+```
+
+---
 
 ## 🚀 Usage & Customization
 
@@ -166,9 +279,9 @@ for model, counts in accuracies.items():
     print(f"{model}: {counts['correct']}/{counts['total']} ({pct:.1f}%)")
 ```
 
-## 🔌 API Integration Options
+## 🔌 API Integration Approaches
 
-### Option 1: OpenRouter (Current - Convenience)
+### Unified API Gateway: OpenRouter
 
 Use OpenRouter for unified access to multiple models with a single API key:
 
@@ -189,7 +302,7 @@ def get_model_response(prompt, model_id, api_key):
 
 ---
 
-### Option 2: Direct API Integration (Recommended for Production)
+### Direct API Integration (Recommended for Production)
 
 Integrate each model's official API directly:
 
@@ -302,7 +415,7 @@ def get_qwen_response(prompt, api_key):
 
 ---
 
-### Option 3: LiteLLM Abstraction (Current for Verification)
+### LiteLLM Abstraction (Current for Verification)
 
 Use LiteLLM for unified verification agent interface:
 
@@ -325,7 +438,7 @@ def verify_response(model_response, correct_answer, model="gpt-4"):
 
 ---
 
-### Option 4: Custom Abstraction Layer (Recommended)
+### Custom Abstraction Layer
 
 Build your own unified interface:
 
@@ -430,11 +543,11 @@ def create_verification_agent(model):
 
 ---
 
-## ✅ Verification Agent Alternatives
+## ✅ Verification Approaches
 
-The current Stage 3 uses Google ADK's LlmAgent for verification, but you can choose different approaches based on your needs:
+The current Stage 3 uses Google ADK's LlmAgent for verification, but multiple approaches are available based on your requirements:
 
-### Option A: Google ADK LlmAgent (Current - Recommended for Complex Verification)
+### Google ADK LlmAgent (Current - Recommended for Complex Verification)
 
 Use the built-in LlmAgent framework:
 
@@ -464,7 +577,7 @@ result = agent.run(f"Response: {model_response}\nCorrect: {correct_answer}")
 
 ---
 
-### Option B: Simple Direct LLM Comparison (Lightweight)
+### Simple Direct LLM Comparison (Lightweight)
 
 Skip the agent framework and use direct API calls:
 
@@ -512,67 +625,7 @@ def verify_response_simple(response, correct_answer, api_key, model="gpt-4o"):
 
 ---
 
-### Option C: Pydantic + Direct API (Type-Safe)
-
-Use Pydantic for validation and structured outputs:
-
-```python
-from pydantic import BaseModel
-from typing import Optional
-import requests
-import json
-
-class VerificationResult(BaseModel):
-    is_correct: bool
-    confidence: float  # 0.0 to 1.0
-    reason: str
-    error_type: Optional[str] = None  # e.g., "calculation", "logic", "format"
-
-def verify_with_pydantic(response, correct_answer, api_key, model="gpt-4o"):
-    """Verification with type validation"""
-    headers = {"Authorization": f"Bearer {api_key}"}
-
-    prompt = f"""Verify this response strictly.
-    Model: {response}
-    Correct: {correct_answer}
-
-    JSON: {{"is_correct": bool, "confidence": 0.0-1.0, "reason": "...", "error_type": null or string}}"""
-
-    data = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "response_format": {"type": "json_object"}
-    }
-
-    api_response = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers=headers,
-        json=data
-    )
-
-    result = api_response.json()
-    text = result['choices'][0]['message']['content']
-
-    # Validate with Pydantic
-    try:
-        verification = VerificationResult(**json.loads(text))
-        return verification
-    except Exception as e:
-        return VerificationResult(
-            is_correct=False,
-            confidence=0.0,
-            reason=f"Validation failed: {str(e)}"
-        )
-```
-
-**Pros:** Type-safe, auto-validation, IDE support, cleaner code
-**Cons:** Requires Pydantic, more boilerplate, slower parsing
-**Best for:** Large-scale deployments, data quality concerns
-**Cost:** ~$0.0001 per verification call
-
----
-
-### Option D: Rule-Based Verification (No LLM)
+### Rule-Based Verification (No LLM)
 
 Skip LLM entirely for deterministic checks:
 
@@ -616,63 +669,6 @@ def verify_response_rules(response, correct_answer):
 **Best for:** Multiple choice, exact numerical answers, quick screening
 **Cost:** Free
 
----
-
-### Option E: Hybrid Approach (Smart Routing)
-
-Use rules first, LLM for complex cases:
-
-```python
-def verify_response_hybrid(response, correct_answer, api_key, threshold=0.5):
-    """Use rules first, then LLM if needed"""
-
-    # Step 1: Try rule-based verification
-    rule_result = verify_response_rules(response, correct_answer)
-
-    if rule_result['is_correct']:
-        return {
-            "is_correct": True,
-            "method": "rule_based",
-            "confidence": 0.99
-        }
-
-    # Step 2: If uncertain, use LLM
-    if rule_result.get('similarity', 0) > threshold:
-        llm_result = verify_with_pydantic(response, correct_answer, api_key)
-        return {
-            "is_correct": llm_result.is_correct,
-            "method": "llm_verification",
-            "confidence": llm_result.confidence,
-            "reason": llm_result.reason
-        }
-
-    # Step 3: Clear mismatch
-    return {
-        "is_correct": False,
-        "method": "rule_based",
-        "confidence": 0.99,
-        "reason": f"Similarity too low: {rule_result.get('similarity', 0):.2f}"
-    }
-```
-
-**Pros:** Cost-efficient, fast for obvious cases, LLM for edge cases
-**Cons:** More complex logic, threshold tuning needed
-**Best for:** Large-scale benchmarks, cost-sensitive deployments
-**Cost:** ~$0.00001 per verification (mostly rules, occasional LLM)
-
----
-
-### Verification Approach Comparison
-
-| Aspect | Option A (LlmAgent) | Option B (Simple) | Option C (Pydantic) | Option D (Rules) | Option E (Hybrid) |
-|--------|-------------------|------------------|-------------------|-----------------|------------------|
-| **Speed** | ~2-3s per call | ~2-3s per call | ~2-3s per call | <100ms | ~1s average |
-| **Accuracy** | Very high (95%+) | High (90%+) | Very high (95%+) | Low (70%) | High (90%+) |
-| **Cost/1000** | $0.10 | $0.10 | $0.10 | Free | $0.01 |
-| **Setup Time** | 15 min | 5 min | 10 min | 5 min | 20 min |
-| **Parallelizable** | Yes (async) | Yes | Yes | Yes | Yes |
-| **Error Handling** | Excellent | Good | Excellent | Good | Good |
-| **Best Use Case** | Production | Prototyping | Data quality | QA screening | Scale evaluation |
 
 ---
 
@@ -736,7 +732,7 @@ id | instruction | problem_text | answer_latex | ...
 
 ## 🔑 Configuration Guide
 
-### Option 1: Environment Variables (OS Level)
+### Environment Variables (OS Level)
 
 Set environment variables in your terminal/shell:
 
@@ -763,7 +759,7 @@ python3 1model_response_collector.py
 
 ---
 
-### Option 2: .env File (Recommended for Development)
+### .env File (Recommended for Development)
 
 Create a `.env` file in your project root:
 
@@ -825,7 +821,7 @@ data/
 
 ---
 
-### Option 3: .env.example (Share Configuration Template)
+### .env.example (Share Configuration Template)
 
 Create a `.env.example` file for developers:
 
@@ -855,97 +851,12 @@ cp .env.example .env
 
 ---
 
-### Option 4: Config File (YAML/JSON)
-
-For more complex configurations, use a config file:
-
-```yaml
-# config.yaml
-api_keys:
-  openrouter: sk-or-...
-  openai: sk-...
-  deepseek: sk-...
-
-files:
-  input: data/questions.xlsx
-  output: data/responses.xlsx
-  data_dir: data/
-
-models:
-  - name: GPT-4o
-    api_id: openai/gpt-4o
-    provider: openai
-  - name: DeepSeek-V3
-    api_id: deepseek/deepseek-v3.2
-    provider: deepseek
-
-generation:
-  temperature: 0.0
-  max_tokens: 2000
-  timeout: 30
-```
-
-Load in Python:
-
-```python
-import yaml
-import os
-
-config_path = os.getenv("CONFIG_PATH", "config.yaml")
-with open(config_path) as f:
-    config = yaml.safe_load(f)
-
-api_key = config['api_keys']['openrouter']
-input_file = config['files']['input']
-```
-
-**Pros:** Complex configurations, environment-specific variants
-**Cons:** More setup, harder to keep secrets secure
-
----
-
-### Option 5: Command-Line Arguments (CLI)
-
-Pass configuration via command-line:
-
-```python
-# collector_cli.py
-import argparse
-import os
-
-parser = argparse.ArgumentParser(description='Collect LLM responses')
-parser.add_argument('--input', default='data/questions.xlsx', help='Input file')
-parser.add_argument('--output', default='data/responses.xlsx', help='Output file')
-parser.add_argument('--api-key', required=True, help='OpenRouter API key')
-parser.add_argument('--temperature', type=float, default=0.0, help='Model temperature')
-parser.add_argument('--models', nargs='+', default=['gpt-4o', 'deepseek-v3'], help='Models to test')
-
-args = parser.parse_args()
-
-# Use args.input, args.output, etc.
-```
-
-Run with:
-
-```bash
-python3 1model_response_collector.py \
-  --input data/my_questions.xlsx \
-  --output data/my_responses.xlsx \
-  --api-key sk-or-... \
-  --models gpt-4o deepseek-v3 mistral-large
-```
-
-**Pros:** Flexible, scriptable, good for CI/CD
-**Cons:** Long command lines, hard to manage many parameters
-
----
-
 ### Recommended Configuration Strategy
 
 ```
 Development:     Use .env file (python-dotenv)
 CI/CD Pipeline:  Use environment variables
-Production:      Use config file + environment variables
+Production:      Use environment variables
 Sharing:         Commit .env.example, not .env
 ```
 
@@ -1185,6 +1096,6 @@ If you use this pipeline in research, cite as:
 
 ---
 
-**Last Updated**: December 12, 2025
-**Version**: 1.1.0
-**Status**: Production-ready
+**Last Updated**: December 31, 2025
+**Version**: 2.0.0
+**Status**: Production-ready with Selenium Scraping & Multi-Source Collection

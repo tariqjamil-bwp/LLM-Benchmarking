@@ -60,7 +60,7 @@ def get_model_response(prompt, model_id, api_key, temperature=0.0, max_tokens=20
         return f"Error: HTTP {response.status_code} - {response.text}"
 
 
-def get_model_for_agent(modelnum=1):
+def get_model_for_agent(modelnum=2):
     """
     Get the LLM model instance for verification agent.
 
