@@ -2,6 +2,16 @@
 
 A production-ready pipeline for collecting responses from multiple Large Language Models, verifying their correctness, and generating analysis reports. Supports API-based collection, web scraping, local inference, and manual entry.
 
+## 📌 What's New in v1.1.0
+
+**Enhanced API Response Tracking:** Captures OpenRouter metadata (finish_reason, token counts) for definitive truncation detection and optimization analysis.
+
+**Restructured JSON Format:** Separate "metadata" key prevents metadata fields from leaking into response detection, eliminating architectural bugs.
+
+**Improved Verification:** Simplified verification system with dynamic metadata extraction works seamlessly with new JSON structure.
+
+See [Latest Enhancements](#latest-enhancements-v110) below for details.
+
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -119,6 +129,105 @@ python3 3model_response_verifier.py    # Verify correctness
 │  • Analysis-ready for all models                                │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Latest Enhancements (v1.1.0)
+
+### 1. API Response Metadata Tracking (Code 1 & models.py)
+
+**Problem Solved:** Previous approach used heuristics to detect incomplete responses (unreliable).
+
+**Solution:** Now captures OpenRouter API metadata for definitive truncation detection.
+
+**What's Captured:**
+- `finish_reason`:
+  - `"stop"` = response completed normally
+  - `"length"` = response hit max_tokens limit
+  - `"error"` = API error occurred
+- `completion_tokens`: Tokens used for response generation
+- `total_tokens`: Total tokens including prompt
+
+**Improvement:** Increased `max_tokens` from 4000 to 10000 for more complete responses.
+
+**Example response with metadata:**
+```json
+{
+  "content": "To find the determinant...",
+  "finish_reason": "stop",
+  "completion_tokens": 1410,
+  "total_tokens": 1534
+}
+```
+
+**Impact:** Can now definitively identify which responses were truncated and optimize token usage across models.
+
+---
+
+### 2. JSON Structure with Separate Metadata Key (Code 2)
+
+**Problem Solved:** Metadata fields ('instruction', 'subcategory') were leaking into model responses dict, causing false model detection.
+
+**Solution:** Separate "metadata" key in JSON structure with dynamic field detection from Excel headers.
+
+**Old Structure (Mixed/Problematic):**
+```json
+{
+  "question_id": {
+    "responses": {"model": "response"},
+    "problem_text": "...",        ← Metadata at root
+    "instruction": "..."          ← Can leak into responses!
+  }
+}
+```
+
+**New Structure (Clean):**
+```json
+{
+  "question_id": {
+    "metadata": {
+      "problem_text": "...",
+      "problem_latex": "...",
+      "answer_latex": "...",
+      "instruction": "...",
+      "subcategory": "...",
+      "level": "3",
+      "category": "computational"
+    },
+    "responses": {
+      "Qwen-72B": "response...",
+      "DeepSeek-V3": "response..."
+    },
+    "correct": {
+      "Qwen-72B": true,
+      "DeepSeek-V3": false
+    }
+  }
+}
+```
+
+**Key Changes:**
+- Changed `BASE_QNA_FILE` from ds4_qna.json to ds4_qna.xlsx (source of truth)
+- Dynamic metadata detection from Excel column headers (no hardcoding)
+- Backwards compatible migration from old flat structure
+- Prevents bugs where metadata leaks into model response detection
+
+**Impact:** Architectural fix - metadata can never be mistaken for a model name.
+
+---
+
+### 3. Simplified Verification Logic (Code 3)
+
+**Changes:**
+- Updated to read metadata from separate "metadata" key
+- Changed `answer_latex` access to `question["metadata"]["answer_latex"]`
+- Updated Excel export to read metadata columns from metadata key
+- Simplified response existence checks (removed unnecessary complexity)
+- Dynamic metadata column extraction from JSON structure
+
+**Impact:** Verification pipeline now aligns with clean JSON architecture, reducing bugs and maintenance burden.
+
+---
 
 ## Project Structure
 
