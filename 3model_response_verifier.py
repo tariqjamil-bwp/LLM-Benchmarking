@@ -73,11 +73,12 @@ def create_verification_agent(model):
     return LlmAgent(
         model=model,
         name="verification_agent",
-        description="Verifies if a model response conceptually matches a correct mathematical answer.",
+        description="Verifies if a model response for a linear-agebra problem matches the correct answer.",
         instruction=dedent("""
-            You are a precise verification agent that checks if a model response conceptually matches a correct mathematical answer.
-            The user will provide a model response and the ground truth answer in JSON format like: {"model_response": "...", "correct_answer": "..."}.
-            Compare the model_response to the correct_answer mathematically. Consider equivalent mathematical expressions, simplified forms, or different representations that are conceptually identical as correct.
+            You are an expert in linear algebra / mathematics.
+            Yoor task is to correctly verify if the model response for given linear algebra / mathematics problem matches with the given correct answer (latex form).
+            You will provided your response in JSON format like: {"model_response": "...", "correct_answer": "..."}.
+            While comparing, consider equivalent mathematical expressions, simplified forms, or different representations that are conceptually identical as correct.
 
             IMPORTANT: Respond ONLY with a valid JSON object in this exact format (no markdown, no extra text):
             {"is_correct": true, "explanation": "brief explanation"}
@@ -85,6 +86,21 @@ def create_verification_agent(model):
             {"is_correct": false, "explanation": "brief explanation"}
         """).strip()
     )
+    # return LlmAgent(
+    #         model=model,
+    #         name="verification_agent",
+    #         description="Verifies if a model response conceptually matches a correct mathematical answer.",
+    #         instruction=dedent("""
+    #             You are a precise verification agent that checks if a model response conceptually matches a correct mathematical answer.
+    #             The user will provide a model response and the ground truth answer in JSON format like: {"model_response": "...", "correct_answer": "..."}.
+    #             Compare the model_response to the correct_answer mathematically. Consider equivalent mathematical expressions, simplified forms, or different representations that are conceptually identical as correct.
+
+    #             IMPORTANT: Respond ONLY with a valid JSON object in this exact format (no markdown, no extra text):
+    #             {"is_correct": true, "explanation": "brief explanation"}
+    #             or
+    #             {"is_correct": false, "explanation": "brief explanation"}
+    #         """).strip()
+    #     )
 
 # ================================================================================
 # AGENT INITIALIZATION
@@ -114,18 +130,14 @@ async def call_verification_agent(model_response, correct_answer):
     # Truncate long responses, keeping ending portion (where final answer typically is)
     max_length = 10000
     if len(model_response) > max_length:
-        truncated_model_response = "[TRUNCATED_BEGINNING] " + model_response[-max_length:]
+        normalized_model_response = "[TRUNCATED_BEGINNING] " + model_response[-max_length:]
+        print('MODEL RESPONSE TOO LONG')
     else:
-        truncated_model_response = model_response
-
-    if len(correct_answer) > max_length:
-        truncated_correct_answer = "[TRUNCATED_BEGINNING] " + correct_answer[-max_length:]
-    else:
-        truncated_correct_answer = correct_answer
+        normalized_model_response = model_response
 
     query_json = json.dumps({
-        "model_response": truncated_model_response,
-        "correct_answer": truncated_correct_answer
+        "model_response": normalized_model_response,
+        "correct_answer": correct_answer
     })
 
     user_content = types.Content(role='user', parts=[types.Part(text=query_json)])
@@ -166,34 +178,22 @@ async def response_gt_compare(responses_json, question_id, model_name, ground_tr
     """
     logger = logging.getLogger(__name__)
 
-    # Nested structure access: responses_json[question_id]['responses'][model_name]
-    if not (question_id in responses_json and
-            isinstance(responses_json[question_id], dict) and
-            'responses' in responses_json[question_id] and
-            isinstance(responses_json[question_id]['responses'], dict) and
-            model_name in responses_json[question_id]['responses'] and
-            responses_json[question_id]['responses'][model_name] is not None and
-            str(responses_json[question_id]['responses'][model_name]).strip() != ''):
+    # Get response from new JSON format structure
+    response = responses_json[question_id]['responses'].get(model_name)
+    if not response or str(response).strip() == '':
         logger.info(f"  {model_name}: No response to verify")
         return None
 
-    if ('correct' in responses_json[question_id] and
-        isinstance(responses_json[question_id]['correct'], dict) and
-        model_name in responses_json[question_id]['correct']):
-        existing_result = responses_json[question_id]['correct'][model_name]
-        if existing_result is not None and isinstance(existing_result, bool):
-            logger.info(f"  {model_name}: Verification already exists ({existing_result}), skipping")
-            return existing_result
-        elif existing_result is not None:
-            logger.info(f"  {model_name}: Verification exists but not boolean ({existing_result}), will re-process")
-        else:
-            logger.info(f"  {model_name}: Verification exists as None, will re-process")
+    existing_result = responses_json[question_id]['correct'].get(model_name)
+    if existing_result is not None and isinstance(existing_result, bool):
+        logger.info(f"  {model_name}: Verification already exists ({existing_result}), skipping")
+        return existing_result
 
     model_response = responses_json[question_id]['responses'][model_name]
     verification_result = await call_verification_agent(model_response, ground_truth)
 
-    is_correct = verification_result.get('is_correct', False)
-    explanation = verification_result.get('explanation', 'No explanation provided')
+    is_correct = verification_result['is_correct']
+    explanation = verification_result['explanation']
 
     # Store in nested 'correct' structure
     if 'correct' not in responses_json[question_id]:
@@ -275,9 +275,10 @@ async def verify_model_responses():
             verified_data[question_id] = {}
             logger.info(f"  Added new question: {question_id}")
 
-        for key in ['level', 'category', 'problem_text', 'problem_latex', 'answer_latex', 'instruction']:
-            if key in response_data:
-                verified_data[question_id][key] = response_data[key]
+        # Handle metadata from new structure with metadata key (required)
+        if 'metadata' not in verified_data[question_id]:
+            verified_data[question_id]['metadata'] = {}
+        verified_data[question_id]['metadata'].update(response_data['metadata'])
 
         if 'responses' not in verified_data[question_id]:
             verified_data[question_id]['responses'] = {}
@@ -310,12 +311,10 @@ async def verify_model_responses():
     synced_updates = 0
 
     for question_id, response_data in responses_input.items():
-        if 'correct' in response_data and isinstance(response_data['correct'], dict):
+        if 'correct' in response_data:
             for model_name, correct_value in response_data['correct'].items():
                 if (correct_value is not None and
                     isinstance(correct_value, bool) and
-                    question_id in verified_data and
-                    'correct' in verified_data[question_id] and
                     verified_data[question_id]['correct'].get(model_name) is None):
                     verified_data[question_id]['correct'][model_name] = correct_value
                     logger.info(f"  Synced manual update: {question_id} / {model_name} = {correct_value}")
@@ -329,10 +328,9 @@ async def verify_model_responses():
 
     verified_count = 0
     for question_id, data in verified_data.items():
-        if 'correct' in data and isinstance(data['correct'], dict):
-            for model_name, value in data['correct'].items():
-                if value is not None and isinstance(value, bool):
-                    verified_count += 1
+        for model_name, value in data['correct'].items():
+            if value is not None and isinstance(value, bool):
+                verified_count += 1
     logger.info(f"Found {verified_count} existing verified results (agent + manual)")
 
     logger.info(f"Ground truth (answer_latex) will be read from VERIFIED structure")
@@ -355,7 +353,7 @@ async def verify_model_responses():
     logger.info(f"Starting verification for {len(questions_in_verified)} questions")
 
     for index, question_id in enumerate(questions_in_verified):
-        ground_truth = verified_data[question_id].get('answer_latex', '')
+        ground_truth = verified_data[question_id]['metadata']['answer_latex']
         if not ground_truth:
             logger.warning(f"  Question {question_id} has no answer_latex, skipping")
             continue
@@ -404,7 +402,9 @@ async def verify_model_responses():
 # ================================================================================
 # EXCEL EXPORT
 # ================================================================================
-    metadata_cols = ['id', 'level', 'category', 'problem_text', 'problem_latex', 'answer_latex', 'instruction']
+    # Extract metadata columns dynamically from the verified data (first question)
+    first_question_id = list(verified_data.keys())[0]
+    metadata_cols = ['id'] + sorted([col for col in verified_data[first_question_id]['metadata'].keys()])
 
     df_rows = []
     for question_id, data in verified_data.items():
@@ -415,7 +415,7 @@ async def verify_model_responses():
 
         for col in metadata_cols:
             if col != 'id':  # Skip 'id' since we already added it
-                row[col] = data.get(col, None)
+                row[col] = data['metadata'].get(col, None)
 
         if 'responses' in data and isinstance(data['responses'], dict):
             for model_name in sorted(data['responses'].keys()):
