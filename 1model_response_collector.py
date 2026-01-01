@@ -22,7 +22,8 @@ from models import get_model_response, MODEL_CONFIGS
 # ================================================================================
 # FILE DEFINITIONS
 # ================================================================================
-INPUT_FILE = "data/ds2_qna.xlsx"      # Input: Questions dataset
+INPUT_FILE = "data/ds4_qna.xlsx"           # Input: Questions dataset
+INPUT_JSON_FILE = "data/ds4_qna.json"      # Input: Source with Type field
 OUTPUT_FILE = "data/qna_responses.xlsx"  # Output: Excel with collected responses
 JSON_FILE = "data/qna_responses.json"     # Output: JSON for resume capability
 
@@ -45,13 +46,13 @@ def process_model_responses(model_configs):
     logger = setup_logging()
 
     if not model_configs:
-        # default Model configurations
+        # default Model configurations (standardized hyphenated naming)
         model_configs = [
-            {'api_id': 'qwen/qwen-2.5-72b-instruct', 'column_name': 'Qwen_72B'},
+            {'api_id': 'qwen/qwen-2.5-72b-instruct', 'column_name': 'Qwen-72B'},
             {'api_id': 'deepseek/deepseek-v3.2', 'column_name': 'DeepSeek-V3'},
-            {'api_id': 'mistralai/mistral-large-2512', 'column_name': 'Mistral Large'},
-            {'api_id': 'meta-llama/llama-3.3-70b-instruct', 'column_name': 'Llama 3.3 70B'},
-            {'api_id': 'openai/gpt-4o', 'column_name': 'GPT-4o'}
+            {'api_id': 'mistralai/mistral-large-2512', 'column_name': 'Mistral-Large'},
+            {'api_id': 'meta-llama/llama-3.3-70b-instruct', 'column_name': 'Llama-3.3-70B'},
+            {'api_id': 'openai/gpt-4o', 'column_name': 'GPT-4o'},
         ]
 
     # Validate API key
@@ -82,7 +83,12 @@ def process_model_responses(model_configs):
             responses[question_id] = {}
         for config in model_configs:
             if config['column_name'] not in responses[question_id]:
-                responses[question_id][config['column_name']] = None
+                responses[question_id][config['column_name']] = {
+                    "content": None,
+                    "finish_reason": None,
+                    "completion_tokens": None,
+                    "total_tokens": None
+                }
 
     # Process each model sequentially
     for config in model_configs:
@@ -96,7 +102,7 @@ def process_model_responses(model_configs):
             question_id = str(row['id'])
 
             # Skip if response already exists
-            if responses[question_id][model_column_name] is not None:
+            if responses[question_id][model_column_name]["content"] is not None:
                 processed_count += 1
                 logger.info(f"[{processed_count}/{len(df)}] Skipping {question_id} (already processed)")
                 continue
@@ -107,20 +113,30 @@ def process_model_responses(model_configs):
             instruction = row['instruction']
 
             try:
-                response = get_model_response(instruction, model_api_id, api_key, max_tokens=1000)
+                response_data = get_model_response(instruction, model_api_id, api_key, max_tokens=10000)
 
-                if response and len(response.strip()) > 0:
-                    if "Error:" in response or "HTTP" in response:
-                        logger.warning(f"API returned error: {response[:100]}...")
+                if response_data and response_data.get("content") and len(response_data["content"].strip()) > 0:
+                    content = response_data["content"]
+                    if "Error:" in content or "HTTP" in content:
+                        logger.warning(f"API returned error: {content[:100]}...")
                     else:
-                        logger.info(f"Got response ({len(response)} chars)")
-                    responses[question_id][model_column_name] = response
+                        finish_reason = response_data.get("finish_reason", "unknown")
+                        completion_tokens = response_data.get("completion_tokens", 0)
+                        status = f"({len(content)} chars, finish_reason: {finish_reason}, tokens: {completion_tokens})"
+                        logger.info(f"Got response {status}")
+
+                    responses[question_id][model_column_name] = response_data
                 else:
                     logger.warning("Got empty response, keeping as None")
 
             except Exception as e:
                 logger.error(f"Error: {str(e)}")
-                responses[question_id][model_column_name] = f"ERROR: {str(e)}"
+                responses[question_id][model_column_name] = {
+                    "content": f"ERROR: {str(e)}",
+                    "finish_reason": "error",
+                    "completion_tokens": 0,
+                    "total_tokens": 0
+                }
 
             # Save progress after each response
             with open(JSON_FILE, 'w') as f:
@@ -153,7 +169,10 @@ def process_model_responses(model_configs):
                 if pd.isna(existing_value) or existing_value == "" or str(existing_value) == "nan":
                     response_value = responses[question_id][model_column_name]
                     if response_value is not None:
-                        result_df.at[index, model_column_name] = response_value
+                        # Extract content from dict
+                        content = response_value.get("content") if isinstance(response_value, dict) else response_value
+                        if content is not None:
+                            result_df.at[index, model_column_name] = content
 
         # Add empty verification column for manual/automated verification
         correct_column_name = f"{model_column_name}_correct"
