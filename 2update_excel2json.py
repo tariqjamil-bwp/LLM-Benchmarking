@@ -22,8 +22,24 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 # ================================================================================
 # FILE DEFINITIONS
 # ================================================================================
+BASE_QNA_FILE = "data/ds4_qna.xlsx"                 # Base QNA metadata reference (Excel with column structure)
 INPUT_EXCEL_FILE = "data/qna_responses_final.xlsx"  # Input: Manually edited Excel
 OUTPUT_JSON_FILE = "data/qna_responses_final.json"  # Output: Nested JSON structure
+
+# ================================================================================
+# HELPER FUNCTIONS
+# ================================================================================
+def get_metadata_fields():
+    """Extract metadata field names from base QNA Excel file"""
+    try:
+        base_df = pd.read_excel(BASE_QNA_FILE)
+        # Get column names from the base QNA file
+        metadata_fields = set(base_df.columns)
+        return metadata_fields
+    except Exception as e:
+        print(f"Warning: Could not load metadata from {BASE_QNA_FILE}: {str(e)}")
+        # Fallback to default metadata fields
+        return {'id', 'level', 'category', 'type', 'problem_text', 'problem_latex', 'answer_value', 'answer_latex', 'matrix', 'difficulty', 'instruction', 'subcategory'}
 
 # ================================================================================
 # MAIN PROCESSING
@@ -34,13 +50,14 @@ def update_json_from_excel():
     # Load Excel file
     df = pd.read_excel(INPUT_EXCEL_FILE)
 
-    # Identify model response columns (exclude metadata and verification columns)
-    exclude_columns = ['id', 'level', 'category', 'problem_text', 'problem_latex', 'answer_latex', 'instruction']
+    # Identify model response columns dynamically based on base QNA file
+    metadata_columns = get_metadata_fields()
     model_columns = []
     for col in df.columns:
-        if col not in exclude_columns and not col.endswith('_correct'):
+        if col not in metadata_columns and not col.endswith('_correct'):
             model_columns.append(col)
 
+    print(f"Metadata fields from {BASE_QNA_FILE}: {sorted(metadata_columns)}")
     print(f"Model columns found: {model_columns} ({len(model_columns)} total)")
 
     # Validate and fix _correct columns
@@ -91,24 +108,36 @@ def update_json_from_excel():
 
     # Build updated JSON with nested structure
     updated_json_data = {}
-    metadata_columns = ['level', 'category', 'problem_text', 'problem_latex', 'answer_latex', 'instruction']
 
     for _, row in df.iterrows():
         question_id = str(row['id'])
 
-        # Initialize with nested structure: {responses: {}, correct: {}}
+        # Initialize with nested structure: {metadata: {}, responses: {}, correct: {}}
         updated_json_data[question_id] = {
+            "metadata": {},
             "responses": {},
             "correct": {}
         }
 
-        # Add metadata fields at root level
+        # Add metadata fields under metadata key (from base QNA structure)
         for meta_col in metadata_columns:
             if meta_col in df.columns and pd.notna(row[meta_col]):
-                updated_json_data[question_id][meta_col] = str(row[meta_col])
+                updated_json_data[question_id]["metadata"][meta_col] = str(row[meta_col])
 
-        # Preserve existing verification results from JSON
+        # Preserve existing verification results and metadata from JSON
         if question_id in existing_data:
+            # Handle metadata from old structure (root level) if it exists
+            if "metadata" in existing_data[question_id] and isinstance(existing_data[question_id]["metadata"], dict):
+                # New structure: copy metadata from "metadata" key
+                for meta_key, meta_value in existing_data[question_id]["metadata"].items():
+                    updated_json_data[question_id]["metadata"][meta_key] = meta_value
+            else:
+                # Old flat structure: migrate metadata from root level
+                for key in list(existing_data[question_id].keys()):
+                    if key in metadata_columns:
+                        updated_json_data[question_id]["metadata"][key] = existing_data[question_id][key]
+
+            # Handle verification results
             if "correct" in existing_data[question_id] and isinstance(existing_data[question_id]["correct"], dict):
                 # New structure: copy from "correct" key
                 for model_name, correct_value in existing_data[question_id]["correct"].items():
