@@ -56,9 +56,22 @@ Edit `data/qna_responses_final.xlsx` to add responses for additional models dire
 After collecting responses:
 
 ```bash
-python3 2update_excel2json.py          # Merge all sources
-python3 3model_response_verifier.py    # Verify correctness
+# Optional: Aggregate responses from multiple sources
+python3 2a_aggregate_responses.py      # Merge Code 1 + Selenium + Manual + Other APIs
+                                       # Creates qna_responses_final.xlsx
+
+# Required: Convert to JSON and verify
+python3 2update_excel2json.py          # Sync Excel to structured JSON
+python3 3model_response_verifier.py    # Verify correctness with agent
 ```
+
+**Note on 2a_aggregate_responses.py:**
+- **Optional** - Only use if you have responses from multiple collection sources
+- **When to use:**
+  - Combining Code 1 (API) responses with Selenium scraper responses
+  - Merging manual entries with API responses
+  - Adding responses from alternative/custom APIs
+- **Skipped if:** Only using Code 1 (API collection) alone
 
 ## 📊 Pipeline Architecture
 
@@ -99,16 +112,25 @@ python3 3model_response_verifier.py    # Verify correctness
 │  Manual Entry (qna_responses_final.xlsx)                       │
 │      • Add more models by editing Excel manually               │
 │      • Paste responses from any source                         │
-│      • Stage 2 will sync to JSON                               │
+│      • Aggregation (next stage) will merge to JSON              │
 └────────────────────┬───────────────────────────────────────────┘
-                     │ (All responses merged in Excel)
+                     │ (Multiple response Excel files)
+                     ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  STAGE 1a: Response Aggregation [OPTIONAL]                      │
+│  • 2a_aggregate_responses.py                                    │
+│  • Merges responses from multiple collection sources            │
+│  • Combines: Code 1 + Selenium + Manual + Other APIs           │
+│  • Only needed if using multiple collection methods            │
+│  • Outputs: qna_responses_final.xlsx (merged)                  │
+└────────────────────┬────────────────────────────────────────────┘
+                     │
                      ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  STAGE 2: Data Sync (Excel → JSON)                              │
 │  • 2update_excel2json.py                                        │
-│  • Merges all collection methods into one Excel file            │
-│  • Syncs to JSON with nested structure                          │
-│  • Column validation & auto-creation                            │
+│  • Syncs Excel responses to JSON with nested structure          │
+│  • Column validation & metadata key creation                    │
 │  • Outputs: qna_responses_final.json                            │
 └────────────────────┬────────────────────────────────────────────┘
                      │
@@ -237,7 +259,9 @@ project/
 │   ├── 1model_response_collector.py        # API-based collection (OpenRouter)
 │   ├── QWEN_2.5_MATH_72B_SELENIUM_SCRAPER.py  # Web scraping (Selenium)
 │   ├── QWEN_2.5_MATH_7B_HF.ipynb           # Local inference (Jupyter)
-│   └── 2update_excel2json.py               # Merge and sync to JSON
+│   │
+│   ├── 2a_aggregate_responses.py           # [OPTIONAL] Aggregate multi-source responses
+│   └── 2update_excel2json.py               # Merge all sources and sync to JSON
 │
 ├── Verification
 │   └── 3model_response_verifier.py         # Verify response correctness
