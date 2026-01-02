@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-QWEN 2.5-MATH SELENIUM SCRAPER V2 - Improved with Better Element Detection
+QWEN 2.5-MATH 72B HF INFERENCE - HuggingFace Interface Integration
+Collects responses from Qwen2.5-Math via HuggingFace Spaces demo interface
 Auto-detects input field using multiple strategies with robust fallbacks
 """
 

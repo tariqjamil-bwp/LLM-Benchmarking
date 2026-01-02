@@ -31,15 +31,15 @@ python3 1model_response_collector.py
 ```
 Collects from: GPT-4o, DeepSeek, Mistral, Llama, Qwen. Resume-enabled via checkpoints.
 
-#### 2. Web Scraping (Qwen2.5-Math Demo)
+#### 2. HuggingFace Interface (Qwen2.5-Math Demo)
 ```bash
 # Install geckodriver
 brew install geckodriver              # macOS
 # OR: sudo apt-get install firefox-geckodriver  # Linux
 
-python3 QWEN_2.5_MATH_72B_SELENIUM_SCRAPER.py
+python3 QWEN_2.5_MATH_72B_HF_INFERENCE.py
 ```
-Automatically scrapes Qwen2.5-Math HuggingFace demo with intelligent resume capability.
+Collects from Qwen2.5-Math HuggingFace demo interface with intelligent resume capability.
 (requires firefox gecko driver installed)
 
 #### 3. Colab Inference (Qwen-7B)
@@ -97,8 +97,8 @@ python3 3model_response_verifier.py    # Verify correctness with agent
 │      • Resume via JSON checkpoint                              │
 │      • Output: qna_responses.xlsx                              │
 ├────────────────────────────────────────────────────────────────┤
-│  Web Scraping (QWEN_2.5_MATH_72B_SELENIUM_SCRAPER.py)          │
-│      • Scrapes Qwen2.5-Math HF demo interface                  │
+│  HuggingFace Interface (QWEN_2.5_MATH_72B_HF_INFERENCE.py)     │
+│      • Collects from Qwen2.5-Math HF demo interface            │
 │      • Dynamic page load detection + iframe handling           │
 │      • Stability-based response detection                      │
 │      • Smart cache resume from checkpoints                     │
@@ -257,7 +257,7 @@ python3 3model_response_verifier.py    # Verify correctness with agent
 project/
 ├── Collection Scripts
 │   ├── 1model_response_collector.py        # API-based collection (OpenRouter)
-│   ├── QWEN_2.5_MATH_72B_SELENIUM_SCRAPER.py  # Web scraping (Selenium)
+│   ├── QWEN_2.5_MATH_72B_HF_INFERENCE.py   # HuggingFace interface (Selenium)
 │   ├── QWEN_2.5_MATH_7B_HF.ipynb           # Local inference (Jupyter)
 │   │
 │   ├── 2a_aggregate_responses.py           # [OPTIONAL] Aggregate multi-source responses
@@ -288,9 +288,9 @@ project/
 └── README.md
 ```
 
-## Web Scraper Details
+## HuggingFace Interface Details
 
-The Selenium scraper (`QWEN_2.5_MATH_72B_SELENIUM_SCRAPER.py`) automatically collects responses from the Qwen2.5-Math HuggingFace demo interface.
+The HF Inference script (`QWEN_2.5_MATH_72B_HF_INFERENCE.py`) automatically collects responses from the Qwen2.5-Math HuggingFace demo interface.
 
 ### How It Works
 
@@ -304,10 +304,10 @@ The Selenium scraper (`QWEN_2.5_MATH_72B_SELENIUM_SCRAPER.py`) automatically col
 
 **Progress Checkpoints:** Saves a checkpoint every 3 questions for recovery in case of interruption.
 
-### Running the Scraper
+### Running the Collection
 
 ```bash
-python3 QWEN_2.5_MATH_72B_SELENIUM_SCRAPER.py
+python3 QWEN_2.5_MATH_72B_HF_INFERENCE.py
 ```
 
 The browser window opens automatically. You can watch progress in real-time. If interrupted, run the command again to resume from the latest checkpoint.
