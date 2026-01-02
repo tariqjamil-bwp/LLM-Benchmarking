@@ -44,9 +44,9 @@ Collects from Qwen2.5-Math HuggingFace demo interface with intelligent resume ca
 
 #### 3. Colab Inference (Qwen-7B)
 ```bash
-jupyter notebook QWEN_2.5_MATH_7B_HF.ipynb
+jupyter notebook QWEN_2.5_MATH_7B_HF_COLAB.ipynb
 ```
-Runs Qwen-7B on Google Colab. No API keys required.
+Runs Qwen2.5-Math-7B on Google Colab. No API keys required.
 
 #### 4. Manual Entry
 Edit `data/qna_responses_final.xlsx` to add responses for additional models directly.
@@ -104,10 +104,10 @@ python3 3model_response_verifier.py    # Verify correctness with agent
 │      • Smart cache resume from checkpoints                     │
 │      • Output: qna_responses_qwen2.5_math_72b.xlsx             │
 ├────────────────────────────────────────────────────────────────┤
-│  Local/Colab Inference (QWEN_2.5_MATH_7B_HF.ipynb)             │
-│      • Qwen-7B local/Colab inference via Transformers          │
-│      • No API needed - runs on your hardware                   │
-│      • Output: qna_responses_qwen_7b_hf.xlsx                   │
+│  Colab Inference (QWEN_2.5_MATH_7B_HF_COLAB.ipynb)             │
+│      • Qwen2.5-Math-7B Colab inference via Transformers        │
+│      • No API needed - runs on Google Colab GPU                │
+│      • Output: qna_responses_qwen2.5_math_7b.xlsx              │
 ├────────────────────────────────────────────────────────────────┤
 │  Manual Entry (qna_responses_final.xlsx)                       │
 │      • Add more models by editing Excel manually               │
@@ -258,7 +258,7 @@ project/
 ├── Collection Scripts
 │   ├── 1model_response_collector.py        # API-based collection (OpenRouter)
 │   ├── QWEN_2.5_MATH_72B_HF_INFERENCE.py   # HuggingFace interface (Selenium)
-│   ├── QWEN_2.5_MATH_7B_HF.ipynb           # Local inference (Jupyter)
+│   ├── QWEN_2.5_MATH_7B_HF_COLAB.ipynb     # Colab inference (Jupyter)
 │   │
 │   ├── 2a_aggregate_responses.py           # [OPTIONAL] Aggregate multi-source responses
 │   └── 2update_excel2json.py               # Merge all sources and sync to JSON
