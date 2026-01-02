@@ -68,47 +68,9 @@ agent_runner = None
 session_id = None
 
 
-def create_verification_agent(model):
-    """Create a verification agent that outputs JSON via instructions"""
-    return LlmAgent(
-        model=model,
-        name="verification_agent",
-        description="Verifies if a model response for a linear-agebra problem matches the correct answer.",
-        instruction=dedent("""
-            You are an expert in linear algebra / mathematics.
-            Yoor task is to correctly verify if the model response for given linear algebra / mathematics problem matches with the given correct answer (latex form).
-            You will provided your response in JSON format like: {"model_response": "...", "correct_answer": "..."}.
-            While comparing, consider equivalent mathematical expressions, simplified forms, or different representations that are conceptually identical as correct.
-
-            IMPORTANT: Respond ONLY with a valid JSON object in this exact format (no markdown, no extra text):
-            {"is_correct": true, "explanation": "brief explanation"}
-            or
-            {"is_correct": false, "explanation": "brief explanation"}
-        """).strip()
-    )
-    # return LlmAgent(
-    #         model=model,
-    #         name="verification_agent",
-    #         description="Verifies if a model response conceptually matches a correct mathematical answer.",
-    #         instruction=dedent("""
-    #             You are a precise verification agent that checks if a model response conceptually matches a correct mathematical answer.
-    #             The user will provide a model response and the ground truth answer in JSON format like: {"model_response": "...", "correct_answer": "..."}.
-    #             Compare the model_response to the correct_answer mathematically. Consider equivalent mathematical expressions, simplified forms, or different representations that are conceptually identical as correct.
-
-    #             IMPORTANT: Respond ONLY with a valid JSON object in this exact format (no markdown, no extra text):
-    #             {"is_correct": true, "explanation": "brief explanation"}
-    #             or
-    #             {"is_correct": false, "explanation": "brief explanation"}
-    #         """).strip()
-    #     )
-
-# ================================================================================
-# AGENT INITIALIZATION
-# ================================================================================
-async def initialize_agent_runner():
-    """Initialize the agent runner once"""
-    global agent_runner, session_id
-
+def initialize_agent_runner():
+    """Initialize the agent runner (sessions will be created per question)"""
+    global agent_runner
     if agent_runner is None:
         session_service = InMemorySessionService()
         verification_agent = create_verification_agent(MODEL)
@@ -117,21 +79,55 @@ async def initialize_agent_runner():
             app_name="agents",
             session_service=session_service
         )
-        session_id = "verification_session"
-        await session_service.create_session(app_name="agents", user_id="verifier", session_id=session_id)
+
+
+def create_verification_agent(model):
+    """Create a verification agent that outputs JSON via instructions"""
+    # return LlmAgent(
+    #     model=model,
+    #     name="verification_agent",
+    #     description="Verifies if a model response for a linear-agebra problem matches the correct answer.",
+    #     instruction=dedent("""
+    #         You are an expert in linear algebra / mathematics.
+    #         Yoor task is to correctly verify if the model response for given linear algebra / mathematics problem matches with the given correct answer (latex form).
+    #         You will provided your response in JSON format like: {"model_response": "...", "correct_answer": "..."}.
+    #         While comparing, consider equivalent mathematical expressions, simplified forms, or different representations that are conceptually identical as correct.
+
+    #         IMPORTANT: Respond ONLY with a valid JSON object in this exact format (no markdown, no extra text):
+    #         {"is_correct": true, "explanation": "brief explanation"}
+    #         or
+    #         {"is_correct": false, "explanation": "brief explanation"}
+    #     """).strip()
+    # )
+    return LlmAgent(
+            model=model,
+            name="verification_agent",
+            description="Verifies if a model response conceptually matches a correct mathematical answer.",
+            instruction=dedent("""
+                You are a precise verification agent that checks if a model response conceptually matches a correct mathematical answer.
+                The user will provide a model response and the ground truth answer in JSON format like: {"model_response": "...", "correct_answer": "..."}.
+                Compare the model_response to the correct_answer mathematically. Consider equivalent mathematical expressions, simplified forms, or different representations that are conceptually identical as correct.
+
+                IMPORTANT: Respond ONLY with a valid JSON object in this exact format (no markdown, no extra text):
+                {"is_correct": true, "explanation": "brief explanation"}
+                or
+                {"is_correct": false, "explanation": "brief explanation"}
+            """).strip()
+        )
+
 
 # ================================================================================
 # VERIFICATION FUNCTIONS
 # ================================================================================
-async def call_verification_agent(model_response, correct_answer):
+async def call_verification_agent(model_response, correct_answer, session_id):
     """Call the verification agent to check if the response matches the correct answer"""
-    global agent_runner, session_id
+    global agent_runner
 
     # Truncate long responses, keeping ending portion (where final answer typically is)
-    max_length = 10000
+    max_length = 20000
     if len(model_response) > max_length:
         normalized_model_response = "[TRUNCATED_BEGINNING] " + model_response[-max_length:]
-        print('MODEL RESPONSE TOO LONG')
+        print('MODEL RESPONSE TOO LONG.')
     else:
         normalized_model_response = model_response
 
@@ -170,7 +166,7 @@ async def call_verification_agent(model_response, correct_answer):
         return {"is_correct": False, "explanation": f"Failed to parse JSON: {response_text[:100]}"}
 
 
-async def response_gt_compare(responses_json, question_id, model_name, ground_truth, json_file):
+async def response_gt_compare(responses_json, question_id, model_name, ground_truth, json_file, session_id):
     """
     Compare model response with ground truth for a specific question and model.
     Skip if verification already exists in the output file.
@@ -190,7 +186,7 @@ async def response_gt_compare(responses_json, question_id, model_name, ground_tr
         return existing_result
 
     model_response = responses_json[question_id]['responses'][model_name]
-    verification_result = await call_verification_agent(model_response, ground_truth)
+    verification_result = await call_verification_agent(model_response, ground_truth, session_id)
 
     is_correct = verification_result['is_correct']
     explanation = verification_result['explanation']
@@ -335,7 +331,7 @@ async def verify_model_responses():
 
     logger.info(f"Ground truth (answer_latex) will be read from VERIFIED structure")
 
-    await initialize_agent_runner()
+    initialize_agent_runner()
 
     all_models = set()
     for question_id, question_data in verified_data.items():
@@ -363,9 +359,13 @@ async def verify_model_responses():
         print(f"{'='*80}")
         logger.info(f"[{index+1}/{len(questions_in_verified)}] Processing question {question_id}")
 
+        # Create fresh session for this question to prevent context accumulation
+        question_session_id = f"verification_{question_id}"
+        await agent_runner.session_service.create_session(app_name="agents", user_id="verifier", session_id=question_session_id)
+
         for model_idx, model_name in enumerate(model_names):
             print(f"  Model {model_idx+1}/{len(model_names)}: {model_name}")
-            await response_gt_compare(verified_data, question_id, model_name, ground_truth, VERIFIED_JSON_FILE)
+            await response_gt_compare(verified_data, question_id, model_name, ground_truth, VERIFIED_JSON_FILE, question_session_id)
 
         if (index + 1) % 5 == 0:
             print(f"\n{'-'*60}")
